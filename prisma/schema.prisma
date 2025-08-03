@@ -1,0 +1,245 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  INSTRUCTOR
+  CUSTOMER
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  WAITING_LIST
+  COMPLETED
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  BOOKING
+  REFUND
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String
+  role          UserRole  @default(CUSTOMER)
+  phone         String?
+  profileImage  String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Customer specific fields
+  credits       Int       @default(0)
+  medicalCertExpiry DateTime?
+  weeklyBookingLimit Int @default(10)
+
+  // Instructor specific fields
+  bio           String?
+  specialties   String?
+  experience    String?
+  certifications String?
+
+  // Relations
+  bookings      Booking[]
+  creditTransactions CreditTransaction[]
+  instructorActivities Activity[] @relation("InstructorActivities")
+  waitingListEntries WaitingList[]
+  customerPackages CustomerPackage[]
+  
+  // Instructor subscription relations
+  instructorSubscriptions InstructorSubscription[] @relation("InstructorSubscriptions")
+  customerSubscriptions InstructorSubscription[] @relation("CustomerSubscriptions")
+  
+  // Class invitation relations
+  sentInvitations ClassInvitation[] @relation("InstructorInvitations")
+  receivedInvitations ClassInvitation[] @relation("CustomerInvitations")
+
+  @@map("users")
+}
+
+model Activity {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  category      String
+  image         String?
+  duration      Int       // minutes
+  maxCapacity   Int
+  price         Int       // in cents
+  creditsRequired Int     @default(1)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Instructor relation
+  instructorId  String?
+  instructor    User?     @relation("InstructorActivities", fields: [instructorId], references: [id])
+
+  // Relations
+  classes       Class[]
+  bookings      Booking[]
+  waitingListEntries WaitingList[]
+
+  @@map("activities")
+}
+
+model Class {
+  id            String    @id @default(cuid())
+  activityId    String
+  activity      Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  
+  startTime     DateTime
+  endTime       DateTime
+  location      String?
+  videoUrl      String?   // For online classes
+  maxCapacity   Int?      // Override activity capacity if needed
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  bookings      Booking[]
+  waitingListEntries WaitingList[]
+  invitations   ClassInvitation[]
+
+  @@map("classes")
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  activityId    String
+  activity      Activity      @relation(fields: [activityId], references: [id])
+  classId       String?
+  class         Class?        @relation(fields: [classId], references: [id])
+  
+  status        BookingStatus @default(CONFIRMED)
+  creditsUsed   Int           @default(1)
+  bookedAt      DateTime      @default(now())
+  attendedAt    DateTime?
+  cancelledAt   DateTime?
+  notes         String?
+
+  @@map("bookings")
+}
+
+model WaitingList {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  activityId    String
+  activity      Activity  @relation(fields: [activityId], references: [id])
+  classId       String?
+  class         Class?    @relation(fields: [classId], references: [id])
+  
+  position      Int
+  joinedAt      DateTime  @default(now())
+  notifiedAt    DateTime?
+
+  @@unique([userId, activityId, classId])
+  @@map("waiting_lists")
+}
+
+model CreditPackage {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  credits       Int
+  price         Int       // in cents
+  validityDays  Int       @default(365)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  customerPackages CustomerPackage[]
+
+  @@map("credit_packages")
+}
+
+model CustomerPackage {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  packageId       String
+  package         CreditPackage @relation(fields: [packageId], references: [id])
+  
+  creditsRemaining Int
+  purchasedAt     DateTime      @default(now())
+  expiresAt       DateTime
+  isActive        Boolean       @default(true)
+
+  @@map("customer_packages")
+}
+
+model CreditTransaction {
+  id            String                @id @default(cuid())
+  userId        String
+  user          User                  @relation(fields: [userId], references: [id])
+  
+  type          CreditTransactionType
+  amount        Int                   // positive for purchases, negative for usage
+  description   String
+  stripePaymentIntentId String?
+  createdAt     DateTime              @default(now())
+
+  @@map("credit_transactions")
+}
+
+model InstructorSubscription {
+  id              String    @id @default(cuid())
+  instructorId    String
+  instructor      User      @relation("InstructorSubscriptions", fields: [instructorId], references: [id])
+  customerId      String
+  customer        User      @relation("CustomerSubscriptions", fields: [customerId], references: [id])
+  
+  isActive        Boolean   @default(true)
+  subscribedAt    DateTime  @default(now())
+  unsubscribedAt  DateTime?
+  
+  @@unique([instructorId, customerId])
+  @@map("instructor_subscriptions")
+}
+
+model ClassInvitation {
+  id              String           @id @default(cuid())
+  instructorId    String
+  instructor      User             @relation("InstructorInvitations", fields: [instructorId], references: [id])
+  customerId      String
+  customer        User             @relation("CustomerInvitations", fields: [customerId], references: [id])
+  classId         String
+  class           Class            @relation(fields: [classId], references: [id])
+  
+  status          InvitationStatus @default(PENDING)
+  message         String?
+  invitedAt       DateTime         @default(now())
+  respondedAt     DateTime?
+  expiresAt       DateTime
+  
+  @@unique([customerId, classId])
+  @@map("class_invitations")
+}
