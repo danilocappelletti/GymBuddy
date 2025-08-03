@@ -1,4 +1,4 @@
-# Sbookyway - Professional Booking Platform
+# GymBuddy - Professional Booking Platform
 
 A comprehensive Next.js booking platform for managing activities, classes, and courses with advanced features like credit systems, instructor management, and detailed reporting.
 
@@ -77,7 +77,7 @@ A comprehensive Next.js booking platform for managing activities, classes, and c
 
 1. **Clone and setup the project:**
    ```bash
-   cd Sbookyway
+   cd GymBuddy
    npm install
    ```
 
